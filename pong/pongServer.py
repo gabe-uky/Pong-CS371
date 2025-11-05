@@ -37,7 +37,7 @@ def save_passwords(password_dict):
 
 password_dict = load_passwords() #Get the dictionary
 
-#Hash the password for secure stoarge and login
+#Hash the password for secure storage and login
 def pass_hash(password):
     pass_bytes = password.encode()
     return hashlib.sha256(pass_bytes).hexdigest()
@@ -53,22 +53,53 @@ clients = []  # list of connected clients
 
 def handle_client(conn, addr):
     print(f"[NEW CONNECTION] {addr}")
-    while True:
-        try:
-            msg = conn.recv(1024)
-            if not msg:  # client disconnected
-                break
-            # broadcast message to everyone except the sender
-            for c in clients:
-                if c != conn:
-                    c.send(msg)
-        except:
-            break
-    # cleanup after disconnect
-    conn.close()
-    if conn in clients:
-        clients.remove(conn)
-    print(f"[DISCONNECTED] {addr}")
+    authenticated = False
+    username = None
+    try:
+        auth_msg = conn.recv(1024).decode('utf-8').strip()
+        auth_data = json.load(auth_msg)
+
+        if auth_data.get("type") == "auth":
+            username = auth_data.get("username")
+            password = auth_data.get("password")
+
+            hashed_pw = pass_hash(password)
+
+            if username in password_dict:
+                if password_dict[username] == hashed_pw:
+                    authenticated = True
+                    response = { 
+                        "type" : "auth_response",
+                        "success" : True,
+                        "message" : "Login successful"
+                    }
+                else:
+                    
+                        response = { 
+                        "type" : "auth_response",
+                        "success" : False,
+                        "message" : "Incorrect Password"
+                        }
+            else:
+                password_dict[username] = hashed_pw
+                save_passwords(password_dict)
+                authenticated = True
+                response = { 
+                        "type" : "auth_response",
+                        "success" : True,
+                        "message" : "Registration Successful"
+                    }
+            response_json = json.dumps(response)
+            padded_response = response_json.ljust(1024)
+            conn.send(padded_response.encode('utf-8'))
+    except Exception as e:
+        print(f"ERROR {addr} : {e}")
+        authenticated = False
+    if not authenticated:
+        conn.close()
+        print(f"Connection failed with {addr}")
+        return
+    print(f"Authenticated User: {username} from {addr}")
 
 while True:
     conn, addr = server.accept()
