@@ -10,7 +10,8 @@ import pygame
 import tkinter as tk
 import sys
 import socket
-
+import hashlib
+import json
 from assets.code.helperCode import *
 
 # This is the main game loop.  For the most part, you will not need to modify this.  The sections
@@ -162,29 +163,50 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # =========================================================================================
 
 
-
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 # This is where you will connect to the server to get the info required to call the game loop.  Mainly
 # the screen width, height and player paddle (either "left" or "right")
 # If you want to hard code the screen's dimensions into the code, that's fine, but you will need to know
 # which client is which
-def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
+def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.Label, app:tk.Tk) -> None:
     # Purpose:      This method is fired when the join button is clicked
     # Arguments:
     # ip            A string holding the IP address of the server
     # port          A string holding the port the server is using
+    #username       The Users login id
+    #password       The password they are logging in with
     # errorLabel    A tk label widget, modify it's text to display messages to the user (example below)
     # app           The tk window object, needed to kill the window
     
     # Create a socket and connect to the server
     # You don't have to use SOCK_STREAM, use what you think is best
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #Create the socket
+    pw_h = hash_password(password) #hash the password
+
+    auth_message = { #Craft the message to login
+        "type" : "auth",
+        "username" : username,
+        "password" : pw_h
+    }
+    client.connect((ip,int(port))) #Connect to the server
+    msg = json.dumps(auth_message).ljust(1024).encode() #Craft the json message and encode
+    client.send(msg) #Send to server
+
+    rec = client.recv(1024) #Receive information back from the server
+    rec = json.loads(rec.decode().strip()) #Decode and strip
+
+    if(rec["success"] == False): #Wrong Password
+        errorLabel.config(text = f"Incorrect Password for the associated account")
+        errorLabel.update()
+        client.close()
+        return
+    
+    errorLabel.config(text = f"Login Successful")
 
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
 
-
-    # If you have messages you'd like to show the user use the errorLabel widget like so
-    errorLabel.config(text=f"Some update text. You input: IP: {ip}, Port: {port}")
     # You may or may not need to call this, depending on how many times you update the label
     errorLabel.update()     
 
@@ -229,7 +251,7 @@ def startScreen():
     errorLabel = tk.Label(text="")
     errorLabel.grid(column=0, row=6, columnspan=2)
 
-    joinButton = tk.Button(text="Join", command=lambda: joinServer(ipEntry.get(), portEntry.get(), errorLabel, app))
+    joinButton = tk.Button(text="Join", command=lambda: joinServer(ipEntry.get(), portEntry.get(), userEntry.get(), passEntry.get(), errorLabel, app))
     joinButton.grid(column=0, row=5, columnspan=2)
 
     app.mainloop()
