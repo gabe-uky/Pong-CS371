@@ -23,7 +23,7 @@ PASSWORD_FILE = "passwords.json" #Constant will always been in every run
 LEADERBOARD_FILE = "leaderboard.json" #Constant, file will always be called this
 
 #This is to read in the password dictionary
-def load_passwords(): 
+def load_passwords():
     try:
         with open(PASSWORD_FILE, 'r') as f:
             return json.load(f)
@@ -38,12 +38,9 @@ def save_passwords(password_dict):
 password_dict = load_passwords() #Get the dictionary
 
 #Hash the password for secure storage and login
-def pass_hash(password):
-    pass_bytes = password.encode()
-    return hashlib.sha256(pass_bytes).hexdigest()
 
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #Setup of Server Scoker
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #Setup of Server Scoket  
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
 server.bind(("0.0.0.0", 65432))   # listen on all interfaces, port 65432
@@ -57,16 +54,14 @@ def handle_client(conn, addr):
     username = None
     try:
         auth_msg = conn.recv(1024).decode('utf-8').strip()
-        auth_data = json.load(auth_msg)
+        auth_data = json.loads(auth_msg)
 
         if auth_data.get("type") == "auth":
             username = auth_data.get("username")
             password = auth_data.get("password")
 
-            hashed_pw = pass_hash(password)
-
             if username in password_dict:
-                if password_dict[username] == hashed_pw:
+                if password_dict[username] == password:
                     authenticated = True
                     response = { 
                         "type" : "auth_response",
@@ -81,7 +76,7 @@ def handle_client(conn, addr):
                         "message" : "Incorrect Password"
                         }
             else:
-                password_dict[username] = hashed_pw
+                password_dict[username] = password
                 save_passwords(password_dict)
                 authenticated = True
                 response = { 
@@ -100,6 +95,7 @@ def handle_client(conn, addr):
         print(f"Connection failed with {addr}")
         return
     print(f"Authenticated User: {username} from {addr}")
+
 
 while True:
     conn, addr = server.accept()
