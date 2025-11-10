@@ -162,6 +162,32 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
         # =========================================================================================
 
+def game_challenge(client : socket, opp : str, username : str ) -> str:
+    if opp == "random":
+        challenge_msg = {
+            "type" : "Find Opponent",
+            "opponent" : "Random",
+            "Username" : None
+        }
+    else:
+        challenge_msg = {
+            "type" : "Find Opponent",
+            "opponent" : "Specific",
+            "Username" : username
+        }
+    msg = json.dumps(challenge_msg).ljust(1024).encode()
+    client.send(msg)
+
+    rec = client.recv(1024)
+    rec = json.loads(rec.decode().strip())
+    return rec["opponent"]
+
+def specific_chal(client : socket, opp : str, username : str, error:tk.Label) -> None:
+    if username.strip() == "":
+        error.config(text="Bad challenge - User cannot be empty")
+        error.update()
+    else:
+        game_challenge(client, opp, username)
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -204,12 +230,34 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
         return
     
     errorLabel.config(text = f"Login Successful")
+    errorLabel.update()
+
+    image = tk.PhotoImage(file="./assets/images/logo.png") 
+    for widget in app.winfo_children():
+        widget.destroy()
+    titleLabel = tk.Label(app, image=image)
+    titleLabel.image = image  # Keep reference to prevent garbage collection
+    titleLabel.grid(column=0, row=0, columnspan=3)
+    errorLabel = tk.Label(app, text="Choose your opponent:")
+    errorLabel.grid(column=0, row=1, columnspan=3, pady=10)
+
+    randomButton = tk.Button(app, text="Random Opponent",command=lambda: game_challenge(client, "random", None))
+    randomButton.grid(column=0, row=2, columnspan=3, pady=5, padx=20, sticky="EW")
+
+    opponentEntry = tk.Entry(app)
+    opponentEntry.grid(column=1, row=3, pady=5)
+
+    opponentButton = tk.Button(app, text="Specific Opponent",command=lambda: specific_chal(client, "opp", opponentEntry.get(), errorLabel))
+    opponentButton.grid(column=2, row=3, pady=5, padx=5)
+    
+    matchErrorLabel = tk.Label(app, text="", fg="red")
+    matchErrorLabel.grid(column=0, row=4, columnspan=3)
 
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
 
     # You may or may not need to call this, depending on how many times you update the label
-    errorLabel.update()     
-
+        
+    #Show the 
     # Close this window and start the game with the info passed to you from the server
     #app.withdraw()     # Hides the window (we'll kill it later)
     #playGame(screenWidth, screenHeight, ("left"|"right"), client)  # User will be either left or right paddle
@@ -250,9 +298,11 @@ def startScreen():
 
     errorLabel = tk.Label(text="")
     errorLabel.grid(column=0, row=6, columnspan=2)
-
+    if(userEntry.get() == "" or passEntry.get() == ""): ##Have  to come back and fix this so that we can loop this properly
+        errorLabel = tk.Label(text="No NULL passwords or usernames")
+        errorLabel.grid(column=0, row=6, columnspan=2)
     joinButton = tk.Button(text="Join", command=lambda: joinServer(ipEntry.get(), portEntry.get(), userEntry.get(), passEntry.get(), errorLabel, app))
-    joinButton.grid(column=0, row=5, columnspan=2)
+    joinButton.grid(column=0, row=5, columnspan=2) ##CRASHES, no clue where lmao
 
     app.mainloop()
 
