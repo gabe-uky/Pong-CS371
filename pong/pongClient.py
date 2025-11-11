@@ -85,9 +85,6 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # where the ball is and the current score.
         # Feel free to change when the score is updated to suit your needs/requirements
         
-        #PlayerPaddleObj is the paddle
-        #ball holds the ball
-        # we have to enclose the event w/ sync and send that out
          
         # =========================================================================================
 
@@ -162,18 +159,18 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
         # =========================================================================================
 
-def game_challenge(client : socket, opp : str, username : str ) -> str:
+def game_challenge(client : socket, opp : str, username : str ) -> str: #Create the challenge message to send to the server
     if opp == "random":
         challenge_msg = {
             "type" : "Find Opponent",
-            "opponent" : "Random",
-            "Username" : None
+            "mode" : "random",
+            "target" : None
         }
     else:
         challenge_msg = {
             "type" : "Find Opponent",
-            "opponent" : "Specific",
-            "Username" : username
+            "mode" : "specific",
+            "target" : username
         }
     msg = json.dumps(challenge_msg).ljust(1024).encode()
     client.send(msg)
@@ -182,7 +179,7 @@ def game_challenge(client : socket, opp : str, username : str ) -> str:
     rec = json.loads(rec.decode().strip())
     return rec["opponent"]
 
-def specific_chal(client : socket, opp : str, username : str, error:tk.Label) -> None:
+def specific_chal(client : socket, opp : str, username : str, error:tk.Label) -> None: #Check to make sure there is not invalid challenge
     if username.strip() == "":
         error.config(text="Bad challenge - User cannot be empty")
         error.update()
@@ -232,13 +229,14 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
     errorLabel.config(text = f"Login Successful")
     errorLabel.update()
 
-    image = tk.PhotoImage(file="./assets/images/logo.png") 
-    for widget in app.winfo_children():
+    image = tk.PhotoImage(file="./assets/images/logo.png") #Reload the image
+    for widget in app.winfo_children(): #Destroy all widgets
         widget.destroy()
-    titleLabel = tk.Label(app, image=image)
-    titleLabel.image = image  # Keep reference to prevent garbage collection
+    titleLabel = tk.Label(app, image=image) #Repost the image
+    titleLabel.image = image  
     titleLabel.grid(column=0, row=0, columnspan=3)
-    errorLabel = tk.Label(app, text="Choose your opponent:")
+
+    errorLabel = tk.Label(app, text="Choose your opponent:") 
     errorLabel.grid(column=0, row=1, columnspan=3, pady=10)
 
     randomButton = tk.Button(app, text="Random Opponent",command=lambda: game_challenge(client, "random", None))
@@ -255,7 +253,6 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
 
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
 
-    # You may or may not need to call this, depending on how many times you update the label
         
     #Show the 
     # Close this window and start the game with the info passed to you from the server
