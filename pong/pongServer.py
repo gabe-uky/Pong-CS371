@@ -46,36 +46,37 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind(("0.0.0.0", 65432))   # listen on all interfaces, port 65432
 server.listen()
 
-clients = []  # list of connected clients
+waiting_for_game = {}
+game_lock = threading.Lock()
 
 def handle_client(conn, addr):
-    print(f"[NEW CONNECTION] {addr}")
-    authenticated = False
+    print(f"[NEW CONNECTION] {addr}") #output to make sure its working
+    authenticated = False #Vars to use later
     username = None
     try:
         auth_msg = conn.recv(1024).decode('utf-8').strip()
         auth_data = json.loads(auth_msg)
 
-        if auth_data.get("type") == "auth":
-            username = auth_data.get("username")
+        if auth_data.get("type") == "auth": #Make sure this is an authentication message
+            username = auth_data.get("username") #Get the username and password
             password = auth_data.get("password")
 
-            if username in password_dict:
+            if username in password_dict: #This is a reutrning user
                 if password_dict[username] == password:
                     authenticated = True
-                    response = { 
+                    response = {  #Craft the message back
                         "type" : "auth_response",
                         "success" : True,
                         "message" : "Login successful"
                     }
-                else:
+                else: #Wrong password
                     
                         response = { 
                         "type" : "auth_response",
                         "success" : False,
                         "message" : "Incorrect Password"
                         }
-            else:
+            else: #New user, so setup account
                 password_dict[username] = password
                 save_passwords(password_dict)
                 authenticated = True
@@ -84,9 +85,9 @@ def handle_client(conn, addr):
                         "success" : True,
                         "message" : "Registration Successful"
                     }
-            response_json = json.dumps(response)
-            padded_response = response_json.ljust(1024)
-            conn.send(padded_response.encode('utf-8'))
+            response_json = json.dumps(response) #Craft the JSon packet
+            padded_response = response_json.ljust(1024) #Pad
+            conn.send(padded_response.encode('utf-8')) #Encode and send
     except Exception as e:
         print(f"ERROR {addr} : {e}")
         authenticated = False
@@ -97,9 +98,90 @@ def handle_client(conn, addr):
     print(f"Authenticated User: {username} from {addr}")
 
 
+    chal_rec = conn.recv(1024).decode('utf-8').strip()
+    chal_data = json.loads(chal_rec) #This holds the information about who the client is trying to fight
+    user_event = threading.Event()
+    if(chal_data["type"] == "Find Opponent"):
+        if chal_data["mode" == "random"]:
+            with game_lock:
+                found = False
+                for client in waiting_for_game: #loop through clients to see if someone is waiting
+                    client_data = waiting_for_game[client]
+                    if client_data["target"] == None:
+                        found = True
+                        client_data["event"].set()
+                        assignment_msg = {
+                            "type" : "assignment",
+                            "paddle" : "left",
+                            "height" : 640,
+                            "width" : 964,
+                        }
+                        send = json.dumps(assignment_msg)
+                        padded_response = send.ljust(1024)
+                        conn.send(padded_response.encode('utf-8'))
+                        
+                if not found: # we didn't find anyone in the list so we add ourselves
+                    waiting_for_game[username] = {"conn" : conn,  #Insert this person into the waiting for game
+                                        "mode" : "random", 
+                                        "target" : None,
+                                        "event" : user_event}
+
+                
+            if(not found): #we wait for someone to find us
+                user_event.wait()
+                assignment_msg = {
+                            "type" : "assignment",
+                            "paddle" : "right",
+                            "height" : 640,
+                            "width" : 964,
+                        }
+                send = json.dumps(assignment_msg)
+                padded_response = send.ljust(1024)
+                conn.send(padded_response.encode('utf-8'))
+                
+        else:
+            with game_lock:
+
+                found = False
+
+                for client in waiting_for_game: #loop through clients to see if the specific person is waiting
+                    if client == chal_data["target"]: #Found the correct person
+                        found =True
+                        client_data["event"].set()
+                        assignment_msg = {
+                            "type" : "assignment",
+                            "paddle" : "left",
+                            "height" : 640,
+                            "width" : 964,
+                        }
+                        send = json.dumps(assignment_msg)
+                        padded_response = send.ljust(1024)
+                        conn.send(padded_response.encode('utf-8'))
+                if (not found): #we didn't find the person so we edit the list to hold us
+                    waiting_for_game[username] = {"conn" : conn,  #Insert this person into the waiting for game
+                                            "mode" : "specifc", 
+                                            "target" : chal_data["target"],
+                                             "event" : user_event }
+            if (not found): #we wait outside the list
+                user_event.wait()
+                assignment_msg = {
+                            "type" : "assignment",
+                            "paddle" : "right",
+                            "height" : 640,
+                            "width" : 964,
+                        }
+                send = json.dumps(assignment_msg)
+                padded_response = send.ljust(1024)
+                conn.send(padded_response.encode('utf-8'))
+            ##LEAVING IT AT TRYING TO FIGURE OUT WHAT CONSTITUTES STORING A GAME AND WHAT THE CLIENT NEEDS VS WHAT THE SERVER NEEDS##
+    else:
+        conn.close()
+        print("Error when finding opponent for user")
+
+
+
 while True:
     conn, addr = server.accept()
-    clients.append(conn)
     thread = threading.Thread(target=handle_client, args=(conn, addr))
     thread.start()
 
