@@ -177,14 +177,14 @@ def game_challenge(client : socket, opp : str, username : str ) -> str: #Create 
 
     rec = client.recv(1024)
     rec = json.loads(rec.decode().strip())
-    return rec["opponent"]
+    return rec
 
 def specific_chal(client : socket, opp : str, username : str, error:tk.Label) -> None: #Check to make sure there is not invalid challenge
     if username.strip() == "":
         error.config(text="Bad challenge - User cannot be empty")
         error.update()
     else:
-        game_challenge(client, opp, username)
+        return game_challenge(client, opp, username)
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -253,7 +253,7 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
 
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
 
-        
+            
     #Show the 
     # Close this window and start the game with the info passed to you from the server
     #app.withdraw()     # Hides the window (we'll kill it later)
