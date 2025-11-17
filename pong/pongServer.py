@@ -35,8 +35,15 @@ def save_passwords(password_dict):
     with open(PASSWORD_FILE, 'w') as f:
         json.dump(password_dict,f)
 
-password_dict = load_passwords() #Get the dictionary
+def load_leaderboard():
+    try:
+        with open(LEADERBOARD_FILE, 'rw') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return{}
 
+password_dict = load_passwords() #Get the dictionary
+leaderboard = load_leaderboard() # Get the leaderboards
 #Hash the password for secure storage and login
 
 
@@ -46,8 +53,90 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind(("0.0.0.0", 65432))   # listen on all interfaces, port 65432
 server.listen()
 
-waiting_for_game = {}
+waiting_for_game = {} 
 game_lock = threading.Lock()
+
+active_games ={}
+active_lock = threading.Lock()
+
+def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
+    with active_lock: #Add the id to active games
+        if game_id not in active_games:
+            active_games[game_id] ={
+                "user1" : my_name,
+                "user2" : their_name,
+                "status" : "active"
+            }
+        else:
+            print(f"error creating game {my_name} and {their_name}") #Something went wrong and the server prints and error and breaks (handler in pongClient)
+            return
+    me_disconnect = False
+    them_disconnect = False
+    winner = None
+    while True:
+        try:
+            msg = my_conn.recv(1024) # we receive the packet from the user
+
+            if not msg: #We did not receive anything, indicating a disconnect so we tell the opponennt
+                disconnect_msg = {
+                    "type" : "opp_disc",
+                    "message" : "Opponent Disconnected"
+                }
+                me_disconnect = True
+                winner = their_name
+                try:
+                    enemy_conn.send(json.dumps(disconnect_msg).ljust(1024).encode()) #They may have disconnected too
+                except:
+                    them_disconnect = True
+                    winner = None
+                break
+
+            msg_data = msg.decode('utf-8').strip() #We have to make sure no one won yet
+            msg_data = json.loads(msg)
+
+            if msg_data.get("type") == "game_over" and msg_data.get("winner"):
+                # Game ended with a winner
+                winner = msg_data["winner"] 
+                # Forward to opponent
+                enemy_conn.send(msg)
+                break  # Exit game loop
+            else:
+                # Regular game update - forward to opponent
+                try:
+                    enemy_conn.send(msg)
+                except:
+                    them_disconnect = True
+                    winner = my_name
+                    break
+
+        except Exception as e:
+            print(f"Game error for {my_name} : {e}")
+            break
+    
+    with active_lock:
+        if game_id in active_games:
+            del active_games[game_id]
+    
+    if me_disconnect and them_disconnect: #We both disconnected and no one wins
+        return
+    else:
+        if winner:
+            if me_disconnect: #I disonnected so I don't update
+                return
+            elif them_disconnect: #they disconnected so I update
+                if my_name in leaderboard:
+                        leaderboard[my_name]["wins"] = leaderboard[my_name]["wins"] + 1
+                else:
+                    leaderboard[my_name] = {"wins" : 1}
+            else: #We both played out the whole game and received the message
+                if winner == my_name:
+                    if my_name in leaderboard:
+                        leaderboard[my_name]["wins"] = leaderboard[my_name]["wins"] + 1
+                    else:
+                        leaderboard[my_name] = {"wins" : 1}
+
+
+
 
 def handle_client(conn, addr):
     print(f"[NEW CONNECTION] {addr}") #output to make sure its working
@@ -109,7 +198,14 @@ def handle_client(conn, addr):
                     client_data = waiting_for_game[client]
                     if client_data["target"] == None:
                         found = True
+                        client_data["target"] = conn #We set the opponents information
+                        id = f"{username}_{client}"
+                        client_data["id"] = id
+                        #We grab their info
+                        enemy_name = client
+                        enemy_conn = client_data["conn"]
                         client_data["event"].set()
+                        
                         assignment_msg = {
                             "type" : "assignment",
                             "paddle" : "left",
@@ -124,11 +220,18 @@ def handle_client(conn, addr):
                     waiting_for_game[username] = {"conn" : conn,  #Insert this person into the waiting for game
                                         "mode" : "random", 
                                         "target" : None,
-                                        "event" : user_event}
+                                        "event" : user_event,
+                                        "id" : None,
+                                        }
 
                 
             if(not found): #we wait for someone to find us
                 user_event.wait()
+                with game_lock:
+                    enemy_conn = waiting_for_game[username]["target"]
+                    game_id = waiting_for_game[username]["id"]
+                    username_list = game_id.split("_")
+                    enemy_name = username_list[0] 
                 assignment_msg = {
                             "type" : "assignment",
                             "paddle" : "right",
@@ -147,6 +250,14 @@ def handle_client(conn, addr):
                 for client in waiting_for_game: #loop through clients to see if the specific person is waiting
                     if client == chal_data["target"]: #Found the correct person
                         found =True
+
+                        waiting_for_game["target"] = conn #We set the opponents information
+                        id = f"{username}_{client}"
+                        waiting_for_game["id"] = id
+                        #We grab their info
+                        enemy_name = client
+                        enemy_conn = client_data["conn"]
+
                         client_data["event"].set()
                         assignment_msg = {
                             "type" : "assignment",
@@ -161,9 +272,16 @@ def handle_client(conn, addr):
                     waiting_for_game[username] = {"conn" : conn,  #Insert this person into the waiting for game
                                             "mode" : "specifc", 
                                             "target" : chal_data["target"],
-                                             "event" : user_event }
+                                             "event" : user_event,
+                                              "id" : None
+                                              }
             if (not found): #we wait outside the list
                 user_event.wait()
+                with game_lock:
+                    enemy_conn = waiting_for_game[username]["target"]
+                    game_id = waiting_for_game[username]["id"]
+                    username_list = game_id.split("_")
+                    enemy_name = username_list[0] 
                 assignment_msg = {
                             "type" : "assignment",
                             "paddle" : "right",
@@ -173,10 +291,14 @@ def handle_client(conn, addr):
                 send = json.dumps(assignment_msg)
                 padded_response = send.ljust(1024)
                 conn.send(padded_response.encode('utf-8'))
-            ##LEAVING IT AT TRYING TO FIGURE OUT WHAT CONSTITUTES STORING A GAME AND WHAT THE CLIENT NEEDS VS WHAT THE SERVER NEEDS##
+        
     else:
         conn.close()
         print("Error when finding opponent for user")
+    handle_game(conn, enemy_conn, username, enemy_name, game_id)
+    
+    
+    
 
 
 
