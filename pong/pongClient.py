@@ -159,7 +159,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
         # =========================================================================================
 
-def game_challenge(client : socket, opp : str, username : str ) -> str: #Create the challenge message to send to the server
+def game_challenge(client : socket, opp : str, username : str ) -> None: #Create the challenge message to send to the server and gets the assignment info back
     if opp == "random":
         challenge_msg = {
             "type" : "Find Opponent",
@@ -174,17 +174,9 @@ def game_challenge(client : socket, opp : str, username : str ) -> str: #Create 
         }
     msg = json.dumps(challenge_msg).ljust(1024).encode()
     client.send(msg)
-
     rec = client.recv(1024)
-    rec = json.loads(rec.decode().strip())
-    return rec
-
-def specific_chal(client : socket, opp : str, username : str, error:tk.Label) -> None: #Check to make sure there is not invalid challenge
-    if username.strip() == "":
-        error.config(text="Bad challenge - User cannot be empty")
-        error.update()
-    else:
-        return game_challenge(client, opp, username)
+    assignment = json.loads(rec.decode().strip())
+    return assignment
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -235,30 +227,53 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
     titleLabel = tk.Label(app, image=image) #Repost the image
     titleLabel.image = image  
     titleLabel.grid(column=0, row=0, columnspan=3)
-
+    
     errorLabel = tk.Label(app, text="Choose your opponent:") 
     errorLabel.grid(column=0, row=1, columnspan=3, pady=10)
 
-    randomButton = tk.Button(app, text="Random Opponent",command=lambda: game_challenge(client, "random", None))
+
+    matchErrorLabel = tk.Label(app, text="", fg="red")
+    matchErrorLabel.grid(column=0, row=4, columnspan=3)
+    
+    assignment_holder = {"data" : None}
+    #define these subfunctions to avoid a weird loop scenario
+    def on_rand_click(): 
+        assignment_holder["data"] = game_challenge(client,"random", None)
+        app.quit()
+    
+    def on_spec():
+        opponent = opponentEntry.get()
+        if opponent.strip() == "":
+            errorLabel.config(text="Enter username")
+            return
+        assignment_holder["data"] = game_challenge(client,"specific", opponent)
+        app.quit()
+
+    randomButton = tk.Button(app, text="Random Opponent",command=on_rand_click())
     randomButton.grid(column=0, row=2, columnspan=3, pady=5, padx=20, sticky="EW")
 
     opponentEntry = tk.Entry(app)
     opponentEntry.grid(column=1, row=3, pady=5)
 
-    opponentButton = tk.Button(app, text="Specific Opponent",command=lambda: specific_chal(client, "opp", opponentEntry.get(), errorLabel))
+    opponentButton = tk.Button(app, text="Specific Opponent",command=on_spec())
     opponentButton.grid(column=2, row=3, pady=5, padx=5)
-    
-    matchErrorLabel = tk.Label(app, text="", fg="red")
-    matchErrorLabel.grid(column=0, row=4, columnspan=3)
 
-    # Get the required information from your server (screen width, height & player paddle, "left or "right)
+    while True: #Based on the on_rand and on_spec functions we will have the information in assignment holder
+        app.mainloop() #Start a pause until the button is clicked
 
-            
-    #Show the 
-    # Close this window and start the game with the info passed to you from the server
-    #app.withdraw()     # Hides the window (we'll kill it later)
-    #playGame(screenWidth, screenHeight, ("left"|"right"), client)  # User will be either left or right paddle
-    #app.quit()         # Kills the window
+        if assignment_holder["data"]:
+            app.withdraw() #Hide the buttons
+            playGame(assignment_holder["data"]["width"],
+                     assignment_holder["data"]["height"],
+                     assignment_holder["data"]["paddle"],
+                     client) #We now call the button
+            pygame.quit() #Close the window
+            app.deiconify() #Brings the window back up
+            assignment_holder["data"] = None #Reset so the user can challenge again
+        else:
+            break #We never get an assignment so we can just close this
+    app.destroy()
+
 
 
 # This displays the opening screen, you don't need to edit this (but may if you like)
