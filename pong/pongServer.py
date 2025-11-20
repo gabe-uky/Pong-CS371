@@ -37,7 +37,7 @@ def save_passwords(password_dict):
 
 def load_leaderboard():
     try:
-        with open(LEADERBOARD_FILE, 'rw') as f:
+        with open(LEADERBOARD_FILE, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
         return{}
@@ -60,6 +60,7 @@ active_games ={}
 active_lock = threading.Lock()
 
 def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
+    print(f'The thread for {my_name} is working for {their_name}')
     with active_lock: #Add the id to active games
         if game_id not in active_games:
             active_games[game_id] ={
@@ -67,9 +68,6 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
                 "user2" : their_name,
                 "status" : "active"
             }
-        else:
-            print(f"error creating game {my_name} and {their_name}") #Something went wrong and the server prints and error and breaks (handler in pongClient)
-            return
     me_disconnect = False
     them_disconnect = False
     winner = None
@@ -103,6 +101,7 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
             else:
                 # Regular game update - forward to opponent
                 try:
+                    print(f'Sent the message from {their_name} to {my_name}')
                     enemy_conn.send(msg)
                 except:
                     them_disconnect = True
@@ -191,7 +190,7 @@ def handle_client(conn, addr):
     chal_data = json.loads(chal_rec) #This holds the information about who the client is trying to fight
     user_event = threading.Event()
     if(chal_data["type"] == "Find Opponent"):
-        if chal_data["mode" == "random"]:
+        if chal_data["mode"] == "random":
             with game_lock:
                 found = False
                 for client in waiting_for_game: #loop through clients to see if someone is waiting
@@ -199,8 +198,8 @@ def handle_client(conn, addr):
                     if client_data["target"] == None:
                         found = True
                         client_data["target"] = conn #We set the opponents information
-                        id = f"{username}_{client}"
-                        client_data["id"] = id
+                        game_id = f"{username}_{client}"
+                        client_data["id"] = game_id
                         #We grab their info
                         enemy_name = client
                         enemy_conn = client_data["conn"]
@@ -250,14 +249,13 @@ def handle_client(conn, addr):
                 for client in waiting_for_game: #loop through clients to see if the specific person is waiting
                     if client == chal_data["target"]: #Found the correct person
                         found =True
-
-                        waiting_for_game["target"] = conn #We set the opponents information
-                        id = f"{username}_{client}"
-                        waiting_for_game["id"] = id
+                        client_data = waiting_for_game["client"]
+                        client_data["target"] = conn #We set the opponents information
+                        game_id = f"{username}_{client}"
+                        client_data["id"] = game_id
                         #We grab their info
                         enemy_name = client
                         enemy_conn = client_data["conn"]
-
                         client_data["event"].set()
                         assignment_msg = {
                             "type" : "assignment",
@@ -295,6 +293,7 @@ def handle_client(conn, addr):
     else:
         conn.close()
         print("Error when finding opponent for user")
+        return 
     handle_game(conn, enemy_conn, username, enemy_name, game_id)
     
     
@@ -306,5 +305,4 @@ while True:
     conn, addr = server.accept()
     thread = threading.Thread(target=handle_client, args=(conn, addr))
     thread.start()
-
 

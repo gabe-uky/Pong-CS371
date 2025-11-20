@@ -17,8 +17,9 @@ from assets.code.helperCode import *
 # This is the main game loop.  For the most part, you will not need to modify this.  The sections
 # where you should add to the code are marked.  Feel free to change any part of this project
 # to suit your needs.
-def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.socket) -> None:
-    
+def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.socket, username : str) -> None:
+    client.setblocking(False) #makes it so we can play the game
+    print("entered play game")
     # Pygame inits
     pygame.mixer.pre_init(44100, -16, 2, 2048)
     pygame.init()
@@ -89,6 +90,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # =========================================================================================
 
         # Update the player paddle and opponent paddle's location on the screen
+        
         for paddle in [playerPaddleObj, opponentPaddleObj]:
             if paddle.moving == "down":
                 if paddle.rect.bottomleft[1] < screenHeight-10:
@@ -96,7 +98,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             elif paddle.moving == "up":
                 if paddle.rect.topleft[1] > 10:
                     paddle.rect.y -= paddle.speed
-
+                   
         # If the game is over, display the win message
         if lScore > 4 or rScore > 4:
             winText = "Player 1 Wins! " if lScore > 4 else "Player 2 Wins! "
@@ -104,6 +106,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             textRect = textSurface.get_rect()
             textRect.center = ((screenWidth/2), screenHeight/2)
             winMessage = screen.blit(textSurface, textRect)
+            ## ADD IN THE CRAFT MESSAGE HERE
         else:
 
             # ==== Ball Logic =====================================================================
@@ -156,10 +159,45 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # =========================================================================================
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
-
+        paddle_pos = playerPaddleObj.rect.y
+        ball_x = ball.rect.x
+        ball_y = ball.rect.y
+        score = {"left" : lScore, "right" : rScore}
+        update_mesage = {"type" : "game update",
+                         "sync" : sync,
+                         "ball_x" : ball_x,
+                         "ball_y" : ball_y,
+                         "opp_pad" : paddle_pos,
+                         "score" : score}
+        update_mesage = json.dumps(update_mesage).ljust(1024).encode()
+        print("trying to send a message")
+        client.send(update_mesage)
+        print("should have sent the message")
+        try:
+            rec = client.recv(1024)
+            if rec:
+                print(f'{username} receieved data')
+                opp_update = json.loads(rec.decode().strip())
+                if opp_update["sync"] > sync: #They are ahead of us so we catch up
+                    ball.rect.x = opp_update["ball_x"]
+                    ball.rect.y = opp_update["ball_y"]
+                    ball.updatePos() #Debug help
+                    opponentPaddleObj.rect.y = opp_update["opp_pad"]
+                    lScore = opp_update["score"]["left"]
+                    rScore = opp_update["score"]["right"]
+                    sync = opp_update["sync"]
+                elif sync > opp_update["sync"]: #we are ahead of them so they catch up
+                    opponentPaddleObj.rect.y = opp_update["opp_pad"]
+                else: #we are equal
+                    opponentPaddleObj.rect.y = opp_update["opp_pad"]
+        except BlockingIOError:
+            pass
+        except Exception as e:
+            print(f'Error: {e}')
+        pygame.display.update()
         # =========================================================================================
 
-def game_challenge(client : socket, opp : str, username : str ) -> str: #Create the challenge message to send to the server
+def game_challenge(client : socket, opp : str, username : str ) -> None: #Create the challenge message to send to the server and gets the assignment info back
     if opp == "random":
         challenge_msg = {
             "type" : "Find Opponent",
@@ -174,17 +212,9 @@ def game_challenge(client : socket, opp : str, username : str ) -> str: #Create 
         }
     msg = json.dumps(challenge_msg).ljust(1024).encode()
     client.send(msg)
-
     rec = client.recv(1024)
-    rec = json.loads(rec.decode().strip())
-    return rec
-
-def specific_chal(client : socket, opp : str, username : str, error:tk.Label) -> None: #Check to make sure there is not invalid challenge
-    if username.strip() == "":
-        error.config(text="Bad challenge - User cannot be empty")
-        error.update()
-    else:
-        return game_challenge(client, opp, username)
+    assignment = json.loads(rec.decode().strip())
+    return assignment
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -235,30 +265,55 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
     titleLabel = tk.Label(app, image=image) #Repost the image
     titleLabel.image = image  
     titleLabel.grid(column=0, row=0, columnspan=3)
-
+    
     errorLabel = tk.Label(app, text="Choose your opponent:") 
     errorLabel.grid(column=0, row=1, columnspan=3, pady=10)
 
-    randomButton = tk.Button(app, text="Random Opponent",command=lambda: game_challenge(client, "random", None))
-    randomButton.grid(column=0, row=2, columnspan=3, pady=5, padx=20, sticky="EW")
 
+    matchErrorLabel = tk.Label(app, text="", fg="red")
+    matchErrorLabel.grid(column=0, row=4, columnspan=3)
+    
+    assignment_holder = {"data" : None}
+    #define these subfunctions to avoid a weird loop scenario
+    def on_rand_click(): 
+        print("went in rand")
+        assignment_holder["data"] = game_challenge(client,"random", None)
+        app.quit()
+    
+    def on_spec():
+        opponent = opponentEntry.get()
+        if opponent.strip() == "":
+            errorLabel.config(text="Enter username")
+            return
+        assignment_holder["data"] = game_challenge(client,"specific", opponent)
+        app.quit()
+
+    randomButton = tk.Button(app, text="Random Opponent",command=on_rand_click)
+    randomButton.grid(column=0, row=2, columnspan=3, pady=5, padx=20, sticky="EW")
+    print("made random button correct")
     opponentEntry = tk.Entry(app)
     opponentEntry.grid(column=1, row=3, pady=5)
 
-    opponentButton = tk.Button(app, text="Specific Opponent",command=lambda: specific_chal(client, "opp", opponentEntry.get(), errorLabel))
+    opponentButton = tk.Button(app, text="Specific Opponent",command=on_spec)
     opponentButton.grid(column=2, row=3, pady=5, padx=5)
-    
-    matchErrorLabel = tk.Label(app, text="", fg="red")
-    matchErrorLabel.grid(column=0, row=4, columnspan=3)
+    print("made spec button")
+    while True: #Based on the on_rand and on_spec functions we will have the information in assignment holder
+        app.mainloop() #Start a pause until the button is clicked
 
-    # Get the required information from your server (screen width, height & player paddle, "left or "right)
+        if assignment_holder["data"]:
+            app.withdraw() #Hide the buttons
+            playGame(assignment_holder["data"]["width"],
+                     assignment_holder["data"]["height"],
+                     assignment_holder["data"]["paddle"],
+                     client,
+                     username) #We now call the button
+            pygame.quit() #Close the window
+            app.deiconify() #Brings the window back up
+            assignment_holder["data"] = None #Reset so the user can challenge again
+        else:
+            break #We never get an assignment so we can just close this
+    app.destroy()
 
-            
-    #Show the 
-    # Close this window and start the game with the info passed to you from the server
-    #app.withdraw()     # Hides the window (we'll kill it later)
-    #playGame(screenWidth, screenHeight, ("left"|"right"), client)  # User will be either left or right paddle
-    #app.quit()         # Kills the window
 
 
 # This displays the opening screen, you don't need to edit this (but may if you like)
