@@ -24,7 +24,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
     pygame.mixer.pre_init(44100, -16, 2, 2048)
     pygame.init()
     print(f'Player Padd: {playerPaddle}')
-    #sleep(10)
+    sleep(10)
     # Constants
     WHITE = (255,255,255)
     clock = pygame.time.Clock()
@@ -111,7 +111,10 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         else:
 
             # ==== Ball Logic =====================================================================
-            ball.updatePos()
+            if playerPaddle == "left":
+                ball.updatePos()
+            else:
+                pass
 
             # If the ball makes it past the edge of the screen, update score, etc.
             if ball.rect.x > screenWidth:
@@ -160,55 +163,63 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # =========================================================================================
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
-        #send_counter += 1 #inc counter
-        #if send_counter >= 2:
-        #send_counter = 0
-        paddle_pos = playerPaddleObj.rect.y
-        ball_x = ball.rect.x
-        ball_y = ball.rect.y
-        score = {"left": lScore, "right": rScore}
-        update_mesage = {
-            "type": "game update",
-            "sync": sync,
-            "ball_x": ball_x,
-            "ball_y": ball_y,
-            "opp_pad": paddle_pos,
-            "score": score
-        }
-        update_mesage = json.dumps(update_mesage).ljust(1024).encode()
-        encoded = update_mesage[:1024].ljust(1024,b' ') #Test for malform packets
-        print(f"[{username}] Sending {len(encoded)} bytes, sync={sync}", flush=True)
+        send_counter += 1 #inc counter
+        if send_counter >= 2:
+            send_counter = 0
+            paddle_pos = playerPaddleObj.rect.y
+            ball_x = ball.rect.x
+            ball_y = ball.rect.y
+            score = {"left": lScore, "right": rScore}
+            update_mesage = {
+                "type": "game update",
+                "sync": sync,
+                "ball_x": ball_x,
+                "ball_y": ball_y,
+                "opp_pad": paddle_pos,
+                "score": score
+            }
+            update_mesage = json.dumps(update_mesage).ljust(1024).encode()
+            encoded = update_mesage[:1024].ljust(1024,b' ') #Test for malform packets
+            print(f"[{username}] Sending {len(encoded)} bytes, sync={sync}", flush=True)
 
-        try:
-            result = client.sendall(encoded)
-            print(f"[{username}] Sent {result} bytes successfully", flush=True)
-        except BlockingIOError:
-            print(f"[{username}] Send BLOCKED", flush=True)
-            pass  # If buffer full, skip this frame
-        except Exception as e:
-            print(f'Error {e} when sending')
+            try:
+                result = client.send(encoded)
+                print(f"[{username}] Sent {result} bytes successfully", flush=True)
+            except BlockingIOError:
+                print(f"[{username}] Send BLOCKED", flush=True)
+                pass  # If buffer full, skip this frame
+            except Exception as e:
+                print(f'Error {e} when sending')
         
         try:
             rec = client.recv(1024)
             if rec:
                 #print(f'{username} receieved data')
                 opp_update = json.loads(rec.decode().strip())
+                opponentPaddleObj.rect.y = opp_update["opp_pad"] #KEEP IT MAKES IT AUTHORITATIVE
+                if playerPaddle == "right":
+                    ball.rect.x = opp_update["ball_x"]
+                    ball.rect.y = opp_update["ball_y"]
+                    lScore = opp_update["score"]["left"]
+                    rScore = opp_update["score"]["right"]
+                elif playerPaddle == "left":
+                    if opp_update["sync"] > sync + 10:
+                        sync = opp_update["sync"]
+                """        
                 if opp_update["sync"] > sync: #They are ahead of us so we catch up
                     ball.rect.x = opp_update["ball_x"]
                     ball.rect.y = opp_update["ball_y"]
-                    ball.updatePos() #Debug help
-                    opponentPaddleObj.rect.y = opp_update["opp_pad"]
+                    #ball.updatePos() #Debug help
+                    #opponentPaddleObj.rect.y = opp_update["opp_pad"]
                     lScore = opp_update["score"]["left"]
                     rScore = opp_update["score"]["right"]
                     sync = opp_update["sync"]
-                    print(f"[{username}] Catching up to sync {sync}")
+                    print(f'Received sync: {sync}')
                 elif sync > opp_update["sync"]: #we are ahead of them so they catch up
-                    pass
+                    opponentPaddleObj.rect.y = opp_update["opp_pad"]
                 else: #we are equal
                     opponentPaddleObj.rect.y = opp_update["opp_pad"]
-        except json.JSONDecodeError:
-            print("Bad json rec")
-                    
+                    """
         except BlockingIOError:
             pass
         except Exception as e:
