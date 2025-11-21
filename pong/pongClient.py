@@ -160,33 +160,33 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # =========================================================================================
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
-        send_counter += 1 #inc counter
-        if send_counter >= 2:
-            send_counter = 0
-            paddle_pos = playerPaddleObj.rect.y
-            ball_x = ball.rect.x
-            ball_y = ball.rect.y
-            score = {"left": lScore, "right": rScore}
-            update_mesage = {
-                "type": "game update",
-                "sync": sync,
-                "ball_x": ball_x,
-                "ball_y": ball_y,
-                "opp_pad": paddle_pos,
-                "score": score
-            }
-            update_mesage = json.dumps(update_mesage).ljust(1024).encode()
-            encoded = update_mesage[:1024].ljust(1024,b' ') #Test for malform packets
-            print(f"[{username}] Sending {len(encoded)} bytes, sync={sync}", flush=True)
+        #send_counter += 1 #inc counter
+        #if send_counter >= 2:
+        #send_counter = 0
+        paddle_pos = playerPaddleObj.rect.y
+        ball_x = ball.rect.x
+        ball_y = ball.rect.y
+        score = {"left": lScore, "right": rScore}
+        update_mesage = {
+            "type": "game update",
+            "sync": sync,
+            "ball_x": ball_x,
+            "ball_y": ball_y,
+            "opp_pad": paddle_pos,
+            "score": score
+        }
+        update_mesage = json.dumps(update_mesage).ljust(1024).encode()
+        encoded = update_mesage[:1024].ljust(1024,b' ') #Test for malform packets
+        print(f"[{username}] Sending {len(encoded)} bytes, sync={sync}", flush=True)
 
-            try:
-                result = client.sendall(encoded)
-                print(f"[{username}] Sent {result} bytes successfully", flush=True)
-            except BlockingIOError:
-                print(f"[{username}] Send BLOCKED", flush=True)
-                pass  # If buffer full, skip this frame
-            except Exception as e:
-                print(f'Error {e} when sending')
+        try:
+            result = client.sendall(encoded)
+            print(f"[{username}] Sent {result} bytes successfully", flush=True)
+        except BlockingIOError:
+            print(f"[{username}] Send BLOCKED", flush=True)
+            pass  # If buffer full, skip this frame
+        except Exception as e:
+            print(f'Error {e} when sending')
         
         try:
             rec = client.recv(1024)
