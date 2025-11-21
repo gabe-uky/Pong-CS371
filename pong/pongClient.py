@@ -176,11 +176,12 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         #print("trying to send a message")
             try:
                 client.send(update_mesage)
+                print("should have sent the message")
             except BlockingIOError:
                 pass
             except Exception as e:
                 print(f'Error {e} when sending')
-        print("should have sent the message")
+        
         try:
             rec = client.recv(1024)
             if rec:
