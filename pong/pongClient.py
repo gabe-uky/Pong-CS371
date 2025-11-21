@@ -172,11 +172,12 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                             "ball_y" : ball_y,
                             "opp_pad" : paddle_pos,
                             "score" : score}
+            print(f'Sent sync: {sync}')
             update_mesage = json.dumps(update_mesage).ljust(1024).encode()
         #print("trying to send a message")
             try:
                 client.send(update_mesage)
-                print("should have sent the message")
+                #print("should have sent the message")
             except BlockingIOError:
                 pass
             except Exception as e:
@@ -185,7 +186,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         try:
             rec = client.recv(1024)
             if rec:
-                print(f'{username} receieved data')
+                #print(f'{username} receieved data')
                 opp_update = json.loads(rec.decode().strip())
                 if opp_update["sync"] > sync: #They are ahead of us so we catch up
                     ball.rect.x = opp_update["ball_x"]
@@ -195,6 +196,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                     lScore = opp_update["score"]["left"]
                     rScore = opp_update["score"]["right"]
                     sync = opp_update["sync"]
+                    print(f'Received sync: {sync}')
                 elif sync > opp_update["sync"]: #we are ahead of them so they catch up
                     opponentPaddleObj.rect.y = opp_update["opp_pad"]
                 else: #we are equal
