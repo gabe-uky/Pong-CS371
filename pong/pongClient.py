@@ -13,7 +13,7 @@ import socket
 import hashlib
 import json
 from assets.code.helperCode import *
-
+from time import sleep
 # This is the main game loop.  For the most part, you will not need to modify this.  The sections
 # where you should add to the code are marked.  Feel free to change any part of this project
 # to suit your needs.
@@ -23,7 +23,8 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
     # Pygame inits
     pygame.mixer.pre_init(44100, -16, 2, 2048)
     pygame.init()
-
+    print(f'Player Padd: {playerPaddle}')
+    #sleep(10)
     # Constants
     WHITE = (255,255,255)
     clock = pygame.time.Clock()
@@ -161,6 +162,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # opponent's game
         send_counter += 1 #inc counter
         if send_counter >= 2:
+            send_counter = 0
             paddle_pos = playerPaddleObj.rect.y
             ball_x = ball.rect.x
             ball_y = ball.rect.y
@@ -178,7 +180,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             print(f"[{username}] Sending {len(encoded)} bytes, sync={sync}", flush=True)
 
             try:
-                result = client.send(encoded)
+                result = client.sendall(encoded)
                 print(f"[{username}] Sent {result} bytes successfully", flush=True)
             except BlockingIOError:
                 print(f"[{username}] Send BLOCKED", flush=True)
@@ -199,11 +201,14 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                     lScore = opp_update["score"]["left"]
                     rScore = opp_update["score"]["right"]
                     sync = opp_update["sync"]
-                    print(f'Received sync: {sync}')
+                    print(f"[{username}] Catching up to sync {sync}")
                 elif sync > opp_update["sync"]: #we are ahead of them so they catch up
-                    opponentPaddleObj.rect.y = opp_update["opp_pad"]
+                    pass
                 else: #we are equal
                     opponentPaddleObj.rect.y = opp_update["opp_pad"]
+        except json.JSONDecodeError:
+            print("Bad json rec")
+                    
         except BlockingIOError:
             pass
         except Exception as e:
