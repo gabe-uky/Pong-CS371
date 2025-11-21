@@ -49,7 +49,7 @@ leaderboard = load_leaderboard() # Get the leaderboards
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #Setup of Server Scoket  
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
+print(socket.gethostbyname(socket.gethostname()))
 server.bind(("0.0.0.0", 65432))   # listen on all interfaces, port 65432
 server.listen()
 
@@ -74,12 +74,15 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
     while True:
         try:
             msg = my_conn.recv(1024) # we receive the packet from the user
+            print(f"[SERVER] Received {len(msg)} bytes from {my_name}", flush=True)  # ← ADD THIS
 
             if not msg: #We did not receive anything, indicating a disconnect so we tell the opponennt
+                break
                 disconnect_msg = {
                     "type" : "opp_disc",
                     "message" : "Opponent Disconnected"
                 }
+                print(f"{my_name} didn't receive a message from {their_name}")
                 me_disconnect = True
                 winner = their_name
                 try:
@@ -88,28 +91,39 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
                     them_disconnect = True
                     winner = None
                 break
-
-            msg_data = msg.decode('utf-8').strip() #We have to make sure no one won yet
-            msg_data = json.loads(msg)
-
-            if msg_data.get("type") == "game_over" and msg_data.get("winner"):
+            try:
+                msg_data = msg.decode('utf-8').strip() #We have to make sure no one won yet
+                msg_data = json.loads(msg)
+                print(f"[SERVER {my_name}] Parsed successfully, forwarding to {their_name}", flush=True)
+                enemy_conn.send(msg)
+                print(f"[SERVER {my_name}] Forwarded to {their_name}", flush=True)
+            except json.JSONDecodeError as e:
+                print(f"[SERVER {my_name}] JSON error: {e}", flush=True)
+                continue
+            except Exception as e:
+                print(f"[SERVER {my_name}] Exception: {e}", flush=True)
+                break
+            #if msg_data.get("type") == "game_over" and msg_data.get("winner"):
                 # Game ended with a winner
                 winner = msg_data["winner"] 
                 # Forward to opponent
                 enemy_conn.send(msg)
                 break  # Exit game loop
-            else:
+            #else:
                 # Regular game update - forward to opponent
                 try:
-                    print(f'Sent the message from {their_name} to {my_name}')
-                    enemy_conn.send(msg)
+                    if len(msg) == 1024:
+                    #print(f'Sent the message from {their_name} to {my_name}')
+                        enemy_conn.send(msg)
+                    else:
+                        pass
                 except:
                     them_disconnect = True
                     winner = my_name
                     break
 
         except Exception as e:
-            print(f"Game error for {my_name} : {e}")
+            print(f"[SERVER {my_name}] Exception: {e}", flush=True)
             break
     
     with active_lock:
