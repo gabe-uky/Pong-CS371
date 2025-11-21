@@ -173,7 +173,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             "score": score
         }
         update_mesage = json.dumps(update_mesage).ljust(1024).encode()
-
+        update_mesage = update_mesage[:1024].ljust(1024,b'') #Test for malform packets
         try:
             client.send(update_mesage)
         except BlockingIOError:
