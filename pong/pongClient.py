@@ -19,11 +19,11 @@ from time import sleep
 # to suit your needs.
 def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.socket, username : str) -> None:
     client.setblocking(False) #makes it so we can play the game
-    print("entered play game")
+    #print("entered play game")
     # Pygame inits
     pygame.mixer.pre_init(44100, -16, 2, 2048)
     pygame.init()
-    print(f'Player Padd: {playerPaddle}')
+    #print(f'Player Padd: {playerPaddle}')
     #sleep(10)
     # Constants
     WHITE = (255,255,255)
@@ -180,13 +180,13 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             }
             update_mesage = json.dumps(update_mesage).ljust(1024).encode()
             encoded = update_mesage[:1024].ljust(1024,b' ') #Test for malform packets
-            print(f"[{username}] Sending {len(encoded)} bytes, sync={sync}", flush=True)
+          #  print(f"[{username}] Sending {len(encoded)} bytes, sync={sync}", flush=True)
 
             try:
                 result = client.send(encoded)
-                print(f"[{username}] Sent {result} bytes successfully", flush=True)
+               # print(f"[{username}] Sent {result} bytes successfully", flush=True)
             except BlockingIOError:
-                print(f"[{username}] Send BLOCKED", flush=True)
+                #print(f"[{username}] Send BLOCKED", flush=True)
                 pass  # If buffer full, skip this frame
             except Exception as e:
                 print(f'Error {e} when sending')
@@ -196,30 +196,15 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             if rec:
                 #print(f'{username} receieved data')
                 opp_update = json.loads(rec.decode().strip())
-                opponentPaddleObj.rect.y = opp_update["opp_pad"] #KEEP IT MAKES IT AUTHORITATIVE
-                if playerPaddle == "right":
+                opponentPaddleObj.rect.y = opp_update["opp_pad"] #This makes it so that both clients at least update both sides
+                if playerPaddle == "right": #The non authoritative side trusts the authoritative side
                     ball.rect.x = opp_update["ball_x"]
                     ball.rect.y = opp_update["ball_y"]
                     lScore = opp_update["score"]["left"]
                     rScore = opp_update["score"]["right"]
-                elif playerPaddle == "left":
+                elif playerPaddle == "left": #Checks sync of authoritative client
                     if opp_update["sync"] > sync + 10:
                         sync = opp_update["sync"]
-                """        
-                if opp_update["sync"] > sync: #They are ahead of us so we catch up
-                    ball.rect.x = opp_update["ball_x"]
-                    ball.rect.y = opp_update["ball_y"]
-                    #ball.updatePos() #Debug help
-                    #opponentPaddleObj.rect.y = opp_update["opp_pad"]
-                    lScore = opp_update["score"]["left"]
-                    rScore = opp_update["score"]["right"]
-                    sync = opp_update["sync"]
-                    print(f'Received sync: {sync}')
-                elif sync > opp_update["sync"]: #we are ahead of them so they catch up
-                    opponentPaddleObj.rect.y = opp_update["opp_pad"]
-                else: #we are equal
-                    opponentPaddleObj.rect.y = opp_update["opp_pad"]
-                    """
         except BlockingIOError:
             pass
         except Exception as e:
