@@ -66,7 +66,6 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
             active_games[game_id] ={
                 "user1" : my_name,
                 "user2" : their_name,
-                "status" : "active"
             }
     me_disconnect = False
     them_disconnect = False
@@ -78,23 +77,12 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
 
             if not msg: #We did not receive anything, indicating a disconnect so we tell the opponennt
                 break
-                disconnect_msg = {
-                    "type" : "opp_disc",
-                    "message" : "Opponent Disconnected"
-                }
-                print(f"{my_name} didn't receive a message from {their_name}")
-                me_disconnect = True
-                winner = their_name
-                try:
-                    enemy_conn.send(json.dumps(disconnect_msg).ljust(1024).encode()) #They may have disconnected too
-                except:
-                    them_disconnect = True
-                    winner = None
-                break
+
             try:
                 msg_data = msg.decode('utf-8').strip() #We have to make sure no one won yet
                 msg_data = json.loads(msg)
                 #print(f"[SERVER {my_name}] Parsed successfully, forwarding to {their_name}", flush=True)
+            
                 enemy_conn.send(msg)
                # print(f"[SERVER {my_name}] Forwarded to {their_name}", flush=True)
             except json.JSONDecodeError as e:
@@ -103,24 +91,6 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
             except Exception as e:
                 #print(f"[SERVER {my_name}] Exception: {e}", flush=True)
                 break
-            #if msg_data.get("type") == "game_over" and msg_data.get("winner"):
-                # Game ended with a winner
-                winner = msg_data["winner"] 
-                # Forward to opponent
-                enemy_conn.send(msg)
-                break  # Exit game loop
-            #else:
-                # Regular game update - forward to opponent
-                try:
-                    if len(msg) == 1024:
-                    #print(f'Sent the message from {their_name} to {my_name}')
-                        enemy_conn.send(msg)
-                    else:
-                        pass
-                except:
-                    them_disconnect = True
-                    winner = my_name
-                    break
 
         except Exception as e:
             print(f"[SERVER {my_name}] Exception: {e}", flush=True)
@@ -130,23 +100,6 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
         if game_id in active_games:
             del active_games[game_id]
     
-    if me_disconnect and them_disconnect: #We both disconnected and no one wins
-        return
-    else:
-        if winner:
-            if me_disconnect: #I disonnected so I don't update
-                return
-            elif them_disconnect: #they disconnected so I update
-                if my_name in leaderboard:
-                        leaderboard[my_name]["wins"] = leaderboard[my_name]["wins"] + 1
-                else:
-                    leaderboard[my_name] = {"wins" : 1}
-            else: #We both played out the whole game and received the message
-                if winner == my_name:
-                    if my_name in leaderboard:
-                        leaderboard[my_name]["wins"] = leaderboard[my_name]["wins"] + 1
-                    else:
-                        leaderboard[my_name] = {"wins" : 1}
 
 
 
@@ -263,7 +216,7 @@ def handle_client(conn, addr):
                 for client in waiting_for_game: #loop through clients to see if the specific person is waiting
                     if client == chal_data["target"]: #Found the correct person
                         found =True
-                        client_data = waiting_for_game["client"]
+                        client_data = waiting_for_game[client]
                         client_data["target"] = conn #We set the opponents information
                         game_id = f"{username}_{client}"
                         client_data["id"] = game_id
