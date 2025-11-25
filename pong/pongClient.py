@@ -414,11 +414,19 @@ def startScreen():
 
     errorLabel = tk.Label(text="")
     errorLabel.grid(column=0, row=6, columnspan=2)
-    if(userEntry.get() == "" or passEntry.get() == ""): ##Have  to come back and fix this so that we can loop this properly
-        errorLabel = tk.Label(text="No NULL passwords or usernames")
-        errorLabel.grid(column=0, row=6, columnspan=2)
-    joinButton = tk.Button(text="Join", command=lambda: joinServer(ipEntry.get(), portEntry.get(), userEntry.get(), passEntry.get(), errorLabel, app))
-    joinButton.grid(column=0, row=5, columnspan=2) ##CRASHES, no clue where lmao
+    
+    def stringcheck():
+        username = userEntry.get().strip()
+        password = passEntry.get().strip()
+        ip = ipEntry.get().strip()
+        port = ipEntry.get().strip()
+        if username == "" or password == "" or ip == "" or port == "":
+            errorLabel.config(text="No NULL passwords or usernames")
+            errorLabel.update()
+            return
+        joinServer(ipEntry.get(), portEntry.get(), userEntry.get(), passEntry.get(), errorLabel, app)
+    joinButton = tk.Button(text="Join", command=lambda: stringcheck())
+    joinButton.grid(column=0, row=5, columnspan=2)
 
     app.mainloop()
 
