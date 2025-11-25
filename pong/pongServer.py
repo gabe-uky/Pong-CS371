@@ -198,6 +198,7 @@ def handle_client(conn, addr):
                     game_id = waiting_for_game[username]["id"]
                     username_list = game_id.split("_")
                     enemy_name = username_list[0] 
+                    del waiting_for_game[username]
                 assignment_msg = {
                             "type" : "assignment",
                             "paddle" : "right",
@@ -246,7 +247,8 @@ def handle_client(conn, addr):
                     enemy_conn = waiting_for_game[username]["target"]
                     game_id = waiting_for_game[username]["id"]
                     username_list = game_id.split("_")
-                    enemy_name = username_list[0] 
+                    enemy_name = username_list[0]
+                    del waiting_for_game[username] 
                 assignment_msg = {
                             "type" : "assignment",
                             "paddle" : "right",
