@@ -60,7 +60,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
     lScore = 0
     rScore = 0
-
+    game_over = False
     sync = 0
     send_counter = 0 #for send buffer
     while True:
@@ -100,14 +100,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                 if paddle.rect.topleft[1] > 10:
                     paddle.rect.y -= paddle.speed
                    
-        # If the game is over, display the win message
-        if lScore > 4 or rScore > 4:
-            winText = "Player 1 Wins! " if lScore > 4 else "Player 2 Wins! "
-            textSurface = winFont.render(winText, False, WHITE, (0,0,0))
-            textRect = textSurface.get_rect()
-            textRect.center = ((screenWidth/2), screenHeight/2)
-            winMessage = screen.blit(textSurface, textRect)
-            
+        
         else:
 
             # ==== Ball Logic =====================================================================
@@ -190,26 +183,74 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                 pass  # If buffer full, skip this frame
             except Exception as e:
                 print(f'Error {e} when sending')
-        
-        try:
-            rec = client.recv(1024)
-            if rec:
-                #print(f'{username} receieved data')
-                opp_update = json.loads(rec.decode().strip())
-                opponentPaddleObj.rect.y = opp_update["opp_pad"] #This makes it so that both clients at least update both sides
-                if playerPaddle == "right": #The non authoritative side trusts the authoritative side
-                    ball.rect.x = opp_update["ball_x"]
-                    ball.rect.y = opp_update["ball_y"]
-                    lScore = opp_update["score"]["left"]
-                    rScore = opp_update["score"]["right"]
-                elif playerPaddle == "left": #Checks sync of authoritative client
-                    if opp_update["sync"] > sync + 10:
-                        sync = opp_update["sync"]
-        except BlockingIOError:
-            pass
-        except Exception as e:
-            print(f'Error: {e}')
-        pygame.display.update()
+        for _ in range(10):
+            try:
+                if game_over:
+                    return
+                    break
+                rec = client.recv(1024)
+                if rec:
+                    #print(f'{username} receieved data')
+
+                    opp_update = json.loads(rec.decode().strip())
+                    opponentPaddleObj.rect.y = opp_update["opp_pad"] #This makes it so that both clients at least update the opposing paddle
+                    if playerPaddle == "right": #The non authoritative side trusts the authoritative side
+                        ball.rect.x = opp_update["ball_x"]
+                        ball.rect.y = opp_update["ball_y"]
+                        lScore = opp_update["score"]["left"]
+                        rScore = opp_update["score"]["right"]
+                        if lScore > 4 or rScore > 4:
+                            print(f"{username} is returning")
+                            winText = "Player 1 Wins! " if lScore > 4 else "Player 2 Wins! "
+                            textSurface = winFont.render(winText, False, WHITE, (0,0,0))
+                            textRect = textSurface.get_rect()
+                            textRect.center = ((screenWidth/2), screenHeight/2)
+                            screen.blit(textSurface, textRect)
+                            scoreRect = updateScore(lScore, rScore, screen, WHITE, scoreFont)
+                            pygame.display.update()
+                            pygame.time.wait(2000)
+                            game_over = True
+                            return
+                    elif playerPaddle == "left": #Checks sync of authoritative client
+                        if opp_update["sync"] > sync + 10:
+                            sync = opp_update["sync"]
+                    if lScore > 4 or rScore > 4:
+                        winText = "Player 1 Wins! " if lScore > 4 else "Player 2 Wins! "
+                        textSurface = winFont.render(winText, False, WHITE, (0,0,0))
+                        textRect = textSurface.get_rect()
+                        textRect.center = ((screenWidth/2), screenHeight/2)
+                        winMessage = screen.blit(textSurface, textRect)
+                        print(f'Username is returning')
+                        paddle_pos = playerPaddleObj.rect.y
+                        ball_x = ball.rect.x
+                        ball_y = ball.rect.y
+                        score = {"left": lScore, "right": rScore}
+                        update_mesage = {
+                            "type": "game update",
+                            "sync": sync,
+                            "ball_x": ball_x,
+                            "ball_y": ball_y,
+                            "opp_pad": paddle_pos,
+                            "score": score
+                        }
+                        update_mesage = json.dumps(update_mesage).ljust(1024).encode()
+                        encoded = update_mesage[:1024].ljust(1024,b' ') #Test for malform packets
+                        result = client.send(encoded)
+                        result = client.send(encoded)
+                        result = client.send(encoded)
+                        result = client.send(encoded)
+                        result = client.send(encoded)
+                        result = client.send(encoded)
+                        result = client.send(encoded)
+                        result = client.send(encoded)
+                        return
+            except BlockingIOError:
+                break
+                pass
+            except Exception as e:
+                print(f'Error: {e}')
+                break
+            pygame.display.update()
         # =========================================================================================
 
 def game_challenge(client : socket, opp : str, username : str ) -> None: #Create the challenge message to send to the server and gets the assignment info back
@@ -258,7 +299,15 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
         "username" : username,
         "password" : pw_h
     }
-    client.connect((ip,int(port))) #Connect to the server
+    try:
+        client.connect((ip, int(port)))
+        print(f"Connected to {ip}:{port}")  # Debug
+    except Exception as e:
+        print(f"Connection failed: {e}")  # Show the error
+        errorLabel.config(text=f"Cannot connect: {e}")
+        errorLabel.update()
+        return
+    #client.connect((ip,int(port))) #Connect to the server
     msg = json.dumps(auth_message).ljust(1024).encode() #Craft the json message and encode
     client.send(msg) #Send to server
 
@@ -291,7 +340,7 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
     assignment_holder = {"data" : None}
     #define these subfunctions to avoid a weird loop scenario
     def on_rand_click(): 
-        print("went in rand")
+        #print("went in rand")
         assignment_holder["data"] = game_challenge(client,"random", None)
         app.quit()
     
@@ -305,13 +354,13 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
 
     randomButton = tk.Button(app, text="Random Opponent",command=on_rand_click)
     randomButton.grid(column=0, row=2, columnspan=3, pady=5, padx=20, sticky="EW")
-    print("made random button correct")
+    #print("made random button correct")
     opponentEntry = tk.Entry(app)
     opponentEntry.grid(column=1, row=3, pady=5)
 
     opponentButton = tk.Button(app, text="Specific Opponent",command=on_spec)
     opponentButton.grid(column=2, row=3, pady=5, padx=5)
-    print("made spec button")
+    #print("made spec button")
     while True: #Based on the on_rand and on_spec functions we will have the information in assignment holder
         app.mainloop() #Start a pause until the button is clicked
 
