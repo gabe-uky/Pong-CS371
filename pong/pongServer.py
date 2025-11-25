@@ -60,7 +60,7 @@ active_games ={}
 active_lock = threading.Lock()
 
 def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
-    print(f'The thread for {my_name} is working for {their_name}')
+    #print(f'The thread for {my_name} is working for {their_name}')
     with active_lock: #Add the id to active games
         if game_id not in active_games:
             active_games[game_id] ={
@@ -74,7 +74,7 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
     while True:
         try:
             msg = my_conn.recv(1024) # we receive the packet from the user
-            print(f"[SERVER] Received {len(msg)} bytes from {my_name}", flush=True)  # ← ADD THIS
+            #print(f"[SERVER] Received {len(msg)} bytes from {my_name}", flush=True)  # ← ADD THIS
 
             if not msg: #We did not receive anything, indicating a disconnect so we tell the opponennt
                 break
@@ -94,14 +94,14 @@ def handle_game(my_conn, enemy_conn, my_name, their_name, game_id):
             try:
                 msg_data = msg.decode('utf-8').strip() #We have to make sure no one won yet
                 msg_data = json.loads(msg)
-                print(f"[SERVER {my_name}] Parsed successfully, forwarding to {their_name}", flush=True)
+                #print(f"[SERVER {my_name}] Parsed successfully, forwarding to {their_name}", flush=True)
                 enemy_conn.send(msg)
-                print(f"[SERVER {my_name}] Forwarded to {their_name}", flush=True)
+               # print(f"[SERVER {my_name}] Forwarded to {their_name}", flush=True)
             except json.JSONDecodeError as e:
-                print(f"[SERVER {my_name}] JSON error: {e}", flush=True)
+                #print(f"[SERVER {my_name}] JSON error: {e}", flush=True)
                 continue
             except Exception as e:
-                print(f"[SERVER {my_name}] Exception: {e}", flush=True)
+                #print(f"[SERVER {my_name}] Exception: {e}", flush=True)
                 break
             #if msg_data.get("type") == "game_over" and msg_data.get("winner"):
                 # Game ended with a winner
