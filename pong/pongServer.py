@@ -1,7 +1,7 @@
 # =================================================================================================
 # Contributing Authors:	    Gabriel Kahle
 # Email Addresses:          gtka226@uky.edu
-# Date:                     11/25/2025
+# Date:                     11/26/2025
 # Purpose:                  This handles the server logic for login, authentication, matchmaking and gameplay communication between two clients
 # Misc:                     <Not Required.  Anything else you might want to include>
 # =================================================================================================
@@ -291,4 +291,5 @@ while True: #Constant loop of accepting clients when they come in
     conn, addr = server.accept()
     thread = threading.Thread(target=handle_client, args=(conn, addr))
     thread.start()
+
 
