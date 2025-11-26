@@ -158,7 +158,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
         send_counter += 1 #inc counter
-        print(sync)
+        #print(sync)
         if send_counter >= 2: #We are at the 3rd of 3 packets
             send_counter = 0 #Reset the counter
             #Craft the message
