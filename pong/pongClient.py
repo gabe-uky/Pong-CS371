@@ -1,8 +1,8 @@
 # =================================================================================================
-# Contributing Authors:	    <Anyone who touched the code>
-# Email Addresses:          <Your uky.edu email addresses>
-# Date:                     <The date the file was last edited>
-# Purpose:                  <How this file contributes to the project>
+# Contributing Authors:	    Gabriel Kahle
+# Email Addresses:          gtka226@uky.edu
+# Date:                     11/25/2025
+# Purpose:                  This handles the gameplay side and takes in user input to help run the game
 # Misc:                     <Not Required.  Anything else you might want to include>
 # =================================================================================================
 
@@ -18,12 +18,12 @@ from time import sleep
 # where you should add to the code are marked.  Feel free to change any part of this project
 # to suit your needs.
 def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.socket, username : str) -> None:
-    client.setblocking(False) #makes it so we can play the game
-    #print("entered play game")
+    client.setblocking(False) #makes it so we can play the game otherwise the clients get stuck waiting for the receive to execute
+    #print("entered play game") #Debug Statement
     # Pygame inits
     pygame.mixer.pre_init(44100, -16, 2, 2048)
     pygame.init()
-    #print(f'Player Padd: {playerPaddle}')
+    #print(f'Player Padd: {playerPaddle}') #Debug Statement
     #sleep(10)
     # Constants
     WHITE = (255,255,255)
@@ -101,7 +101,8 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                     paddle.rect.y -= paddle.speed
                    
         
-        else:
+        else: #Originially this else statement had the RSCORE check, but I was able to remove it without any issue, so this always executes
+            #We deal with the scoring later on
 
             # ==== Ball Logic =====================================================================
             if playerPaddle == "left":
@@ -157,8 +158,10 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
         send_counter += 1 #inc counter
-        if send_counter >= 2:
-            send_counter = 0
+        print(sync)
+        if send_counter >= 2: #We are at the 3rd of 3 packets
+            send_counter = 0 #Reset the counter
+            #Craft the message
             paddle_pos = playerPaddleObj.rect.y
             ball_x = ball.rect.x
             ball_y = ball.rect.y
@@ -172,35 +175,38 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                 "score": score
             }
             update_mesage = json.dumps(update_mesage).ljust(1024).encode()
-            encoded = update_mesage[:1024].ljust(1024,b' ') #Test for malform packets
+            encoded = update_mesage[:1024].ljust(1024,b' ') #Pad incase of malformed packets
           #  print(f"[{username}] Sending {len(encoded)} bytes, sync={sync}", flush=True)
 
+            #Using try statements because it makes error catching easier
             try:
-                result = client.send(encoded)
+                result = client.send(encoded) 
                # print(f"[{username}] Sent {result} bytes successfully", flush=True)
             except BlockingIOError:
                 #print(f"[{username}] Send BLOCKED", flush=True)
                 pass  # If buffer full, skip this frame
             except Exception as e:
                 print(f'Error {e} when sending')
-        for _ in range(10):
+        for _ in range(10): #This is needed for the game_over sequence, otherwise you get a situation where the buffer is still sorting through packets, but it also shows the matchmaking screen
             try:
                 if game_over:
-                    return
+                    return #I have both of these here for redundancy
                     break
-                rec = client.recv(1024)
+                rec = client.recv(1024) #We try to receive the data
                 if rec:
                     #print(f'{username} receieved data')
 
                     opp_update = json.loads(rec.decode().strip())
                     opponentPaddleObj.rect.y = opp_update["opp_pad"] #This makes it so that both clients at least update the opposing paddle
-                    if playerPaddle == "right": #The non authoritative side trusts the authoritative side
+                    if playerPaddle == "right": #The non authoritative side trusts the authoritative side (non-authoritative is always right)
+                        #Update information to authoritiative
                         ball.rect.x = opp_update["ball_x"]
                         ball.rect.y = opp_update["ball_y"]
                         lScore = opp_update["score"]["left"]
                         rScore = opp_update["score"]["right"]
+                        #Run the lscore/rscore winner check 
                         if lScore > 4 or rScore > 4:
-                            print(f"{username} is returning")
+                            #print(f"{username} is returning")
                             winText = "Player 1 Wins! " if lScore > 4 else "Player 2 Wins! "
                             textSurface = winFont.render(winText, False, WHITE, (0,0,0))
                             textRect = textSurface.get_rect()
@@ -211,16 +217,16 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                             pygame.time.wait(2000)
                             game_over = True
                             return
-                    elif playerPaddle == "left": #Checks sync of authoritative client
-                        if opp_update["sync"] > sync + 10:
+                    elif playerPaddle == "left": #Checks sync of authoritative client with the non-authoritative
+                        if opp_update["sync"] > sync + 10: #Deals with the authoritative client's sync number being out of tune with the non
                             sync = opp_update["sync"]
-                    if lScore > 4 or rScore > 4:
+                    if lScore > 4 or rScore > 4: #Check the scores and run the winner brance
                         winText = "Player 1 Wins! " if lScore > 4 else "Player 2 Wins! "
                         textSurface = winFont.render(winText, False, WHITE, (0,0,0))
                         textRect = textSurface.get_rect()
                         textRect.center = ((screenWidth/2), screenHeight/2)
                         winMessage = screen.blit(textSurface, textRect)
-                        print(f'Username is returning')
+                        #print(f'Username is returning')
                         paddle_pos = playerPaddleObj.rect.y
                         ball_x = ball.rect.x
                         ball_y = ball.rect.y
@@ -233,16 +239,12 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                             "opp_pad": paddle_pos,
                             "score": score
                         }
-                        update_mesage = json.dumps(update_mesage).ljust(1024).encode()
+                        update_mesage = json.dumps(update_mesage).ljust(1024).encode() #Send a message to the other client 
                         encoded = update_mesage[:1024].ljust(1024,b' ') #Test for malform packets
+                        #I send this twice to be safe because I running into an issue of the client that lost would either not receive the packet or some other issue
                         result = client.send(encoded)
                         result = client.send(encoded)
-                        result = client.send(encoded)
-                        result = client.send(encoded)
-                        result = client.send(encoded)
-                        result = client.send(encoded)
-                        result = client.send(encoded)
-                        result = client.send(encoded)
+                        #We send the message just to guarantee that both sides see the same thing, in terms of score and positioning and to be safe that our game ends correctly
                         return
             except BlockingIOError:
                 break
@@ -253,7 +255,14 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             pygame.display.update()
         # =========================================================================================
 
-def game_challenge(client : socket, opp : str, username : str ) -> None: #Create the challenge message to send to the server and gets the assignment info back
+def game_challenge(client : socket, opp : str, username : str ) -> json: #Create the challenge message to send to the server and gets the assignment info back
+    # Purpose:       Sends the message out to the server for and returns the assignment message *Avoids unecessary recursion and allows for simpler rechallenge later on
+    # Arguments:    Client : The socket instance for the server; Opp: The type of opponent they want to face (random or specific); Username: Who they want to face (can be None)
+    # client        The socket instance for the server;
+    # opp           The type of opponent they want to face (random or specific) 
+    # username      Who they want to face (can be None)
+
+    #Craft the message
     if opp == "random":
         challenge_msg = {
             "type" : "Find Opponent",
@@ -266,13 +275,13 @@ def game_challenge(client : socket, opp : str, username : str ) -> None: #Create
             "mode" : "specific",
             "target" : username
         }
-    msg = json.dumps(challenge_msg).ljust(1024).encode()
+    msg = json.dumps(challenge_msg).ljust(1024).encode() #Send it
     client.send(msg)
-    rec = client.recv(1024)
+    rec = client.recv(1024) #Wait for assignment message from server
     assignment = json.loads(rec.decode().strip())
-    return assignment
+    return assignment 
 
-def hash_password(password: str) -> str:
+def hash_password(password: str) -> str: #Hashes the password so we don't send an unencrypted password over the air
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 # This is where you will connect to the server to get the info required to call the game loop.  Mainly
@@ -284,8 +293,8 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
     # Arguments:
     # ip            A string holding the IP address of the server
     # port          A string holding the port the server is using
-    #username       The Users login id
-    #password       The password they are logging in with
+    # username       The Users login id
+    # password       The password they are logging in with
     # errorLabel    A tk label widget, modify it's text to display messages to the user (example below)
     # app           The tk window object, needed to kill the window
     
@@ -299,9 +308,10 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
         "username" : username,
         "password" : pw_h
     }
+    #Connect to server
     try:
         client.connect((ip, int(port)))
-        print(f"Connected to {ip}:{port}")  # Debug
+        #print(f"Connected to {ip}:{port}")  # Debug
     except Exception as e:
         print(f"Connection failed: {e}")  # Show the error
         errorLabel.config(text=f"Cannot connect: {e}")
@@ -311,7 +321,7 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
     msg = json.dumps(auth_message).ljust(1024).encode() #Craft the json message and encode
     client.send(msg) #Send to server
 
-    rec = client.recv(1024) #Receive information back from the server
+    rec = client.recv(1024) #Receive the authentication from the server
     rec = json.loads(rec.decode().strip()) #Decode and strip
 
     if(rec["success"] == False): #Wrong Password
@@ -330,6 +340,7 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
     titleLabel.image = image  
     titleLabel.grid(column=0, row=0, columnspan=3)
     
+    #Create the matchmaking screen
     errorLabel = tk.Label(app, text="Choose your opponent:") 
     errorLabel.grid(column=0, row=1, columnspan=3, pady=10)
 
@@ -338,20 +349,27 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
     matchErrorLabel.grid(column=0, row=4, columnspan=3)
     
     assignment_holder = {"data" : None}
-    #define these subfunctions to avoid a weird loop scenario
-    def on_rand_click(): 
-        #print("went in rand")
-        assignment_holder["data"] = game_challenge(client,"random", None)
+    
+    def on_rand_click() -> None:
+        #Purpose: Using these function avoid a weird recursion scneario with pygame and button function calls
+        #Arguments: None
+        #Since this is a subfunction in joinServer, we don't have to return a value back to it 
+        #print("went in rand") #Debug
+        assignment_holder["data"] = game_challenge(client,"random", None) #Call game_challenge
         app.quit()
     
     def on_spec():
-        opponent = opponentEntry.get()
+        #Purpose: Using this we avoid strange recursion with pygame button function calls, which would be useful if I could implement rematch
+        #Arguments: None
+        #Since this is a subfunction in joinServer, we don't have to return a value back to it
+        opponent = opponentEntry.get() #Get the string of who they want to face to make sure it is not empty
         if opponent.strip() == "":
-            errorLabel.config(text="Enter username")
+            errorLabel.config(text="Enter a valid username")
             return
         assignment_holder["data"] = game_challenge(client,"specific", opponent)
         app.quit()
 
+    #Craft the matchmaking buttons
     randomButton = tk.Button(app, text="Random Opponent",command=on_rand_click)
     randomButton.grid(column=0, row=2, columnspan=3, pady=5, padx=20, sticky="EW")
     #print("made random button correct")
@@ -361,7 +379,7 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
     opponentButton = tk.Button(app, text="Specific Opponent",command=on_spec)
     opponentButton.grid(column=2, row=3, pady=5, padx=5)
     #print("made spec button")
-    while True: #Based on the on_rand and on_spec functions we will have the information in assignment holder
+    while True: #This would be the implementation for if we could get the rematch function to work
         app.mainloop() #Start a pause until the button is clicked
 
         if assignment_holder["data"]:
@@ -370,13 +388,13 @@ def joinServer(ip:str, port:str, username : str, password : str, errorLabel:tk.L
                      assignment_holder["data"]["height"],
                      assignment_holder["data"]["paddle"],
                      client,
-                     username) #We now call the button
+                     username) #We now call the play game
             pygame.quit() #Close the window
-            app.deiconify() #Brings the window back up
+            app.deiconify() #Brings the window back up *Only executes when the game ends
             assignment_holder["data"] = None #Reset so the user can challenge again
         else:
             break #We never get an assignment so we can just close this
-    app.destroy()
+    app.destroy() #They don't want to rematch and just quit
 
 
 
@@ -402,12 +420,12 @@ def startScreen():
     portEntry = tk.Entry(app)
     portEntry.grid(column=1, row=2)
 
-    userLabel = tk.Label(text="Username:")
+    userLabel = tk.Label(text="Username:") #Get the username
     userLabel.grid(column=0, row=3, sticky="W", padx=8)
     userEntry = tk.Entry(app)
     userEntry.grid(column=1,row=3)
 
-    passLabel = tk.Label(text="Password:")
+    passLabel = tk.Label(text="Password:") #Get the password
     passLabel.grid(column=0, row=4, sticky="W", padx=8)
     passEntry = tk.Entry(app)
     passEntry.grid(column=1,row=4)
@@ -416,6 +434,9 @@ def startScreen():
     errorLabel.grid(column=0, row=6, columnspan=2)
     
     def stringcheck():
+        #Purpose: We check to make sure a valid username, password, and server info was passed through the entries
+        #Arguments: None
+        #Since this is a subfunction in startScreen, we don't have to return a value back to it
         username = userEntry.get().strip()
         password = passEntry.get().strip()
         ip = ipEntry.get().strip()
@@ -424,7 +445,7 @@ def startScreen():
             errorLabel.config(text="No NULL passwords or usernames")
             errorLabel.update()
             return
-        joinServer(ipEntry.get(), portEntry.get(), userEntry.get(), passEntry.get(), errorLabel, app)
+        joinServer(ipEntry.get(), portEntry.get(), userEntry.get(), passEntry.get(), errorLabel, app) #We got valid outputs so we can join server
     joinButton = tk.Button(text="Join", command=lambda: stringcheck())
     joinButton.grid(column=0, row=5, columnspan=2)
 
